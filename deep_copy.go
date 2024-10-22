@@ -9,8 +9,7 @@ import (
 //
 // Keep in mind, it does not copy unexported data.
 func DeepCopy[T any](obj T) T {
-	v := reflect.ValueOf(obj)
-	return deepCopy(v, nil, nil).Interface().(T)
+	return DeepCopyWithProcessing(obj, nil)
 }
 
 type ProcFunc func(reflect.Value, *reflect.StructField) reflect.Value
@@ -25,8 +24,8 @@ func DeepCopyWithProcessing[T any](
 	obj T,
 	procFunc ProcFunc,
 ) T {
-	v := reflect.ValueOf(obj)
-	return deepCopy(v, procFunc, nil).Interface().(T)
+	v := reflect.ValueOf(&obj)
+	return *deepCopy(v, procFunc, nil).Interface().(*T)
 }
 
 func deepCopy(
@@ -88,8 +87,8 @@ func deepCopy(
 	case reflect.Func:
 		result.Set(v)
 	case reflect.Interface:
-		if v.IsNil() {
-			return result
+		if !v.Elem().IsValid() { // if unwrapInterface(v) == nil { return v }
+			return v
 		}
 		result.Set(deepCopy(v.Elem(), procFunc, nil))
 	case reflect.Map:
