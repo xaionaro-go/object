@@ -5,6 +5,10 @@ import (
 	"reflect"
 )
 
+type deepCopier struct {
+	CopiedValuesBehindPointers map[uintptr]reflect.Value
+}
+
 // DeepCopy returns a deep copy of the object.
 //
 // Keep in mind, it does not copy unexported data.
@@ -25,10 +29,14 @@ func DeepCopyWithProcessing[T any](
 	procFunc ProcFunc,
 ) T {
 	v := reflect.ValueOf(&obj)
-	return *deepCopy(v, procFunc, nil).Interface().(*T)
+	return *newDeepCopier().deepCopy(v, procFunc, nil).Interface().(*T)
 }
 
-func deepCopy(
+func newDeepCopier() *deepCopier {
+	return &deepCopier{}
+}
+
+func (c *deepCopier) deepCopy(
 	v reflect.Value,
 	procFunc ProcFunc,
 	structField *reflect.StructField,
@@ -80,7 +88,7 @@ func deepCopy(
 		result.Set(v)
 	case reflect.Array:
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(deepCopy(v.Index(i), procFunc, nil))
+			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, nil))
 		}
 	case reflect.Chan:
 		result.Set(v)
@@ -90,7 +98,7 @@ func deepCopy(
 		if !v.Elem().IsValid() { // if unwrapInterface(v) == nil { return v }
 			return v
 		}
-		result.Set(deepCopy(v.Elem(), procFunc, nil))
+		result.Set(c.deepCopy(v.Elem(), procFunc, nil))
 	case reflect.Map:
 		if v.IsNil() {
 			return result
@@ -100,21 +108,29 @@ func deepCopy(
 		for iter.Next() {
 			k := iter.Key()
 			v := iter.Value()
-			result.SetMapIndex(k, deepCopy(v, procFunc, nil))
+			result.SetMapIndex(k, c.deepCopy(v, procFunc, nil))
 		}
 	case reflect.Pointer:
 		if v.IsNil() {
 			return result
 		}
-		result.Set(reflect.New(t.Elem()))                    // result = (*T)(nil)
-		result.Elem().Set(deepCopy(v.Elem(), procFunc, nil)) // *result = *v
+		ptr := v.Pointer()
+		if c.CopiedValuesBehindPointers == nil {
+			c.CopiedValuesBehindPointers = make(map[uintptr]reflect.Value)
+		}
+		if v, ok := c.CopiedValuesBehindPointers[ptr]; ok {
+			return v
+		}
+		c.CopiedValuesBehindPointers[ptr] = result
+		result.Set(reflect.New(t.Elem()))                      // result = &T{}
+		result.Elem().Set(c.deepCopy(v.Elem(), procFunc, nil)) // *result = *v
 	case reflect.Slice:
 		if v.IsNil() {
 			return result
 		}
 		result = reflect.MakeSlice(t, v.Len(), v.Len())
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(deepCopy(v.Index(i), procFunc, nil))
+			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, nil))
 		}
 	case reflect.String:
 		result.Set(v)
@@ -128,7 +144,7 @@ func deepCopy(
 				continue
 			}
 
-			result.Field(i).Set(deepCopy(fV, procFunc, &fT))
+			result.Field(i).Set(c.deepCopy(fV, procFunc, &fT))
 		}
 	default:
 		panic(fmt.Errorf("unexpected kind: %v", v.Kind()))

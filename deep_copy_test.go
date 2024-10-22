@@ -24,6 +24,14 @@ func TestNilInterface(t *testing.T) {
 	require.Equal(t, error(nil), DeepCopy(error(nil)))
 }
 
+func TestInfiniteRecursion(t *testing.T) {
+	s := &testType{
+		SomePublicString: "1",
+	}
+	s.SomePointer = s
+	require.Equal(t, s, DeepCopy(s))
+}
+
 func Test(t *testing.T) {
 	sample := &testType{
 		SomeSlice: nil,
