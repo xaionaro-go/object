@@ -73,13 +73,15 @@ func testSampleWithoutSecrets() *testType {
 			}},
 			SomePublicString: "true == true",
 		},
+		unexpectedField: "unexpected data",
 	}
 }
 
 func TestComplexStructure(t *testing.T) {
 	sample := testSample()
-
+	sample.unexpectedField = ""
 	require.Equal(t, sample, DeepCopy(sample))
+
 	sampleWithoutSecrets := testSampleWithoutSecrets()
 	sampleWithoutSecrets.unexpectedField = ""
 	require.Equal(t, sampleWithoutSecrets, DeepCopyWithoutSecrets(sample))

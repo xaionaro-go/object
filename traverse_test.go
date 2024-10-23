@@ -19,11 +19,21 @@ func TestTraverseZerofy(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+
+	sample.unexpectedField = ""
 	require.Equal(t, &testType{}, sample)
 }
 
 func TestRemoveSecrets(t *testing.T) {
-	sample := testSample()
-	RemoveSecrets(sample)
-	require.Equal(t, testSampleWithoutSecrets(), sample)
+	t.Run("struct", func(t *testing.T) {
+		sample := testSample()
+		RemoveSecrets(sample)
+		require.Equal(t, testSampleWithoutSecrets(), sample)
+	})
+	t.Run("iface-pointer", func(t *testing.T) {
+		sample := testSample()
+		var iface any = *sample
+		RemoveSecrets(&iface)
+		require.Equal(t, *testSampleWithoutSecrets(), iface)
+	})
 }
