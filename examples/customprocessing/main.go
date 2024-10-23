@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/xaionaro-go/deepcopy"
+	"github.com/xaionaro-go/object"
 )
 
 type myStruct struct {
@@ -18,7 +18,7 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := deepcopy.DeepCopyWithProcessing(value, func(v reflect.Value, sf *reflect.StructField) reflect.Value {
+	censoredValue := object.DeepCopyWithProcessing(value, func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
 		if sf == nil {
 			return v
 		}

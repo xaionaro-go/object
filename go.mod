@@ -1,4 +1,4 @@
-module github.com/xaionaro-go/deepcopy
+module github.com/xaionaro-go/object
 
 go 1.22.2
 

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/xaionaro-go/deepcopy"
+	"github.com/xaionaro-go/object"
 )
 
 type myStruct struct {
@@ -17,6 +17,6 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := deepcopy.DeepCopyWithoutSecrets(value)
+	censoredValue := object.DeepCopyWithoutSecrets(value)
 	fmt.Println(censoredValue)
 }

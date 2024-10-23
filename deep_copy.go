@@ -1,13 +1,9 @@
-package deepcopy
+package object
 
 import (
 	"fmt"
 	"reflect"
 )
-
-type deepCopier struct {
-	CopiedValuesBehindPointers map[uintptr]reflect.Value
-}
 
 // DeepCopy returns a deep copy of the object.
 //
@@ -16,20 +12,24 @@ func DeepCopy[T any](obj T) T {
 	return DeepCopyWithProcessing(obj, nil)
 }
 
-type ProcFunc func(reflect.Value, *reflect.StructField) reflect.Value
+type ProcFunc func(*ProcContext, reflect.Value, *reflect.StructField) reflect.Value
 
 // DeepCopyWithProcessing does the same thing as DeepCopy, but
 // also provides possibility to modify the data during the copy.
 //
 // Keep in mind, this function does not process:
-// * the internals of channels, function values, uintptr-s and unsafe.Pointer-s;
+// * the internals of: channels, function values, uintptr-s and unsafe.Pointer-s;
 // * the keys of maps.
 func DeepCopyWithProcessing[T any](
 	obj T,
 	procFunc ProcFunc,
 ) T {
 	v := reflect.ValueOf(&obj)
-	return *newDeepCopier().deepCopy(v, procFunc, nil).Interface().(*T)
+	return *newDeepCopier().deepCopy(v, procFunc, newProcContext(), nil).Interface().(*T)
+}
+
+type deepCopier struct {
+	CopiedValuesBehindPointers map[uintptr]reflect.Value
 }
 
 func newDeepCopier() *deepCopier {
@@ -39,11 +39,12 @@ func newDeepCopier() *deepCopier {
 func (c *deepCopier) deepCopy(
 	v reflect.Value,
 	procFunc ProcFunc,
+	ctx *ProcContext,
 	structField *reflect.StructField,
 ) (_ret reflect.Value) {
 	if procFunc != nil {
 		defer func() {
-			_ret = procFunc(_ret, structField)
+			_ret = procFunc(ctx, _ret, structField)
 		}()
 	}
 
@@ -88,7 +89,7 @@ func (c *deepCopier) deepCopy(
 		result.Set(v)
 	case reflect.Array:
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, nil))
+			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, ctx.Next(fmt.Sprintf("[%d]", i)), nil))
 		}
 	case reflect.Chan:
 		result.Set(v)
@@ -98,7 +99,7 @@ func (c *deepCopier) deepCopy(
 		if !v.Elem().IsValid() { // if unwrapInterface(v) == nil { return v }
 			return v
 		}
-		result.Set(c.deepCopy(v.Elem(), procFunc, nil))
+		result.Set(c.deepCopy(v.Elem(), procFunc, ctx.Next("{}"), nil))
 	case reflect.Map:
 		if v.IsNil() {
 			return result
@@ -108,7 +109,7 @@ func (c *deepCopier) deepCopy(
 		for iter.Next() {
 			k := iter.Key()
 			v := iter.Value()
-			result.SetMapIndex(k, c.deepCopy(v, procFunc, nil))
+			result.SetMapIndex(k, c.deepCopy(v, procFunc, ctx.Next(fmt.Sprintf("[%v]", k)), nil))
 		}
 	case reflect.Pointer:
 		if v.IsNil() {
@@ -122,15 +123,15 @@ func (c *deepCopier) deepCopy(
 			return v
 		}
 		c.CopiedValuesBehindPointers[ptr] = result
-		result.Set(reflect.New(t.Elem()))                      // result = &T{}
-		result.Elem().Set(c.deepCopy(v.Elem(), procFunc, nil)) // *result = *v
+		result.Set(reflect.New(t.Elem()))                                     // result = &T{}
+		result.Elem().Set(c.deepCopy(v.Elem(), procFunc, ctx.Next("*"), nil)) // *result = *v
 	case reflect.Slice:
 		if v.IsNil() {
 			return result
 		}
 		result = reflect.MakeSlice(t, v.Len(), v.Len())
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, nil))
+			result.Index(i).Set(c.deepCopy(v.Index(i), procFunc, ctx.Next(fmt.Sprintf("[%d]", i)), nil))
 		}
 	case reflect.String:
 		result.Set(v)
@@ -144,7 +145,7 @@ func (c *deepCopier) deepCopy(
 				continue
 			}
 
-			result.Field(i).Set(c.deepCopy(fV, procFunc, &fT))
+			result.Field(i).Set(c.deepCopy(fV, procFunc, ctx.Next(fT.Name), &fT))
 		}
 	default:
 		panic(fmt.Errorf("unexpected kind: %v", v.Kind()))
@@ -156,12 +157,12 @@ func (c *deepCopier) deepCopy(
 // fields tagged as `secret:""` reset to their zero values.
 //
 // Keep in mind, this function does not censor:
-// * the internals of channels, function values, uintptr-s and unsafe.Pointer-s;
+// * the internals of: channels, function values, uintptr-s and unsafe.Pointer-s;
 // * the keys of maps.
 //
 // Also, it does not copy unexported data.
 func DeepCopyWithoutSecrets[T any](obj T) T {
-	return DeepCopyWithProcessing(obj, func(v reflect.Value, sf *reflect.StructField) reflect.Value {
+	return DeepCopyWithProcessing(obj, func(_ *ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
 		if sf == nil {
 			return v
 		}

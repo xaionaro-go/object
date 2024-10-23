@@ -1,4 +1,4 @@
-package deepcopy
+package object
 
 import (
 	"testing"
@@ -18,6 +18,7 @@ type testType struct {
 	SomeSecretString string `secret:""`
 	SomePointer      *testType
 	SomeError        error
+	unexpectedField  string
 }
 
 func TestNilInterface(t *testing.T) {
@@ -32,8 +33,8 @@ func TestInfiniteRecursion(t *testing.T) {
 	require.Equal(t, s, DeepCopy(s))
 }
 
-func Test(t *testing.T) {
-	sample := &testType{
+func testSample() *testType {
+	return &testType{
 		SomeSlice: nil,
 		SomeMap: map[mapKey]testType{
 			{1, 2}: {
@@ -52,10 +53,12 @@ func Test(t *testing.T) {
 			SomePublicString: "true == true",
 			SomeSecretString: "but there is a nuance",
 		},
+		unexpectedField: "unexpected data",
 	}
+}
 
-	require.Equal(t, sample, DeepCopy(sample))
-	require.Equal(t, &testType{
+func testSampleWithoutSecrets() *testType {
+	return &testType{
 		SomeSlice: nil,
 		SomeMap: map[mapKey]testType{
 			{1, 2}: {
@@ -70,5 +73,14 @@ func Test(t *testing.T) {
 			}},
 			SomePublicString: "true == true",
 		},
-	}, DeepCopyWithoutSecrets(sample))
+	}
+}
+
+func TestComplexStructure(t *testing.T) {
+	sample := testSample()
+
+	require.Equal(t, sample, DeepCopy(sample))
+	sampleWithoutSecrets := testSampleWithoutSecrets()
+	sampleWithoutSecrets.unexpectedField = ""
+	require.Equal(t, sampleWithoutSecrets, DeepCopyWithoutSecrets(sample))
 }

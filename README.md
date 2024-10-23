@@ -1,6 +1,6 @@
 # About
-[![Go Reference](https://godoc.org/github.com/xaionaro-go/deepcopy?status.svg)](https://godoc.org/github.com/xaionaro-go/deepcopy)
-[![Go Report Card](https://goreportcard.com/badge/github.com/xaionaro-go/deepcopy?branch=main)](https://goreportcard.com/report/github.com/xaionaro-go/deepcopy)
+[![Go Reference](https://godoc.org/github.com/xaionaro-go/object?status.svg)](https://godoc.org/github.com/xaionaro-go/object)
+[![Go Report Card](https://goreportcard.com/badge/github.com/xaionaro-go/object?branch=main)](https://goreportcard.com/report/github.com/xaionaro-go/object)
 
 This package provides functions for deep copying an arbitrary object in Go. The difference of this deepcopier from others is that this allows to use a custom function that modifies the copied data. Personally I use it to erase all the secrets from my data while doing a copy (that in turn is used for logging).
 
@@ -13,7 +13,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/xaionaro-go/deepcopy"
+	"github.com/xaionaro-go/object"
 )
 
 type myStruct struct {
@@ -27,13 +27,13 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := deepcopy.DeepCopy(value)
+	censoredValue := object.DeepCopy(value)
 	fmt.Println(censoredValue)
 }
 
 ```
 ```sh
-$ go run ./examples/deepcopy/
+$ go run ./examples/object/
 {true == true but there is a nuance}
 ```
 
@@ -45,7 +45,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/xaionaro-go/deepcopy"
+	"github.com/xaionaro-go/object"
 )
 
 type myStruct struct {
@@ -59,7 +59,7 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := deepcopy.DeepCopyWithoutSecrets(value)
+	censoredValue := object.DeepCopyWithoutSecrets(value)
 	fmt.Println(censoredValue)
 }
 ```
@@ -76,7 +76,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/xaionaro-go/deepcopy"
+	"github.com/xaionaro-go/object"
 )
 
 type myStruct struct {
@@ -90,7 +90,7 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := deepcopy.DeepCopyWithProcessing(value, func(v reflect.Value, sf *reflect.StructField) reflect.Value {
+	censoredValue := object.DeepCopyWithProcessing(value, func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
 		if sf == nil {
 			return v
 		}
