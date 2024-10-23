@@ -96,6 +96,9 @@ func (traverser *traverser) traverse(
 		}
 		newV, err := traverser.traverse(v.Elem(), visitorFunc, ctx.Next("{}"), nil)
 		if newV != v {
+			if !v.CanSet() {
+				return v, fmt.Errorf("unable to change the value at '%s'", ctx.path)
+			}
 			v.Set(newV)
 		}
 		if err != nil {
