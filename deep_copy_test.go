@@ -2,6 +2,7 @@ package object
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,7 @@ type testType struct {
 	SomeError            error
 	SomeSecretSliceOfAny []any            `secret:""`
 	SomeSecretMap        map[int]testType `secret:""`
+	SomeTime             time.Time
 	unexpectedField      string
 }
 
@@ -57,6 +59,7 @@ func testSample() *testType {
 		},
 		SomeSecretSliceOfAny: []any{"random secrets"},
 		SomeSecretMap:        map[int]testType{1: {}},
+		SomeTime:             time.Date(1, 2, 3, 4, 5, 6, 7, time.UTC),
 		unexpectedField:      "unexpected data",
 	}
 }
@@ -77,16 +80,19 @@ func testSampleWithoutSecrets() *testType {
 			}},
 			SomePublicString: "true == true",
 		},
+		SomeTime:        time.Date(1, 2, 3, 4, 5, 6, 7, time.UTC),
 		unexpectedField: "unexpected data",
 	}
 }
 
 func TestComplexStructure(t *testing.T) {
 	sample := testSample()
+	sample.SomeTime = time.Time{}
 	sample.unexpectedField = ""
 	require.Equal(t, sample, DeepCopy(sample))
 
 	sampleWithoutSecrets := testSampleWithoutSecrets()
+	sampleWithoutSecrets.SomeTime = time.Time{}
 	sampleWithoutSecrets.unexpectedField = ""
 	require.Equal(t, sampleWithoutSecrets, DeepCopyWithoutSecrets(sample))
 }

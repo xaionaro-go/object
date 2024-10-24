@@ -142,26 +142,30 @@ func (c *deepCopier) deepCopy(
 					continue
 				}
 				if !v.CanAddr() {
-					newV := reflect.New(v.Type()).Elem()
-					newV.Set(v)
-					v = newV
+					vWithAddr := reflect.New(v.Type()).Elem()
+					vWithAddr.Set(v)
+					if v.Type() != vWithAddr.Type() {
+						panic(fmt.Errorf("internal error: received wrong type at '%s': expected:%s, received:%s", ctx.path, v.Type(), vWithAddr.Type()))
+					}
+					v = vWithAddr
 				}
-				fV = unsafetools.FieldByIndexInValue(v.Addr(), i)
+				fVWithAddr := unsafetools.FieldByIndexInValue(v.Addr(), i).Elem()
+				if fV.Type() != fVWithAddr.Type() {
+					panic(fmt.Errorf("internal error: received wrong type at '%s': expected:%s, received:%s", ctx.path, fV.Type(), fVWithAddr.Type()))
+				}
+				fV = fVWithAddr
 			}
 
-			newV := c.deepCopy(fV, ctx.Next(fT.Name), &fT)
+			newFV := c.deepCopy(fV, ctx.Next(fT.Name), &fT)
+			outF := result.Field(i)
+			if outF.Type() != newFV.Type() {
+				panic(fmt.Errorf("received wrong type at '%s': expected:%s, received:%s", ctx.path, outF.Type(), newFV.Type()))
+			}
 			if fT.PkgPath != "" {
 				// unexported
-				out := unsafetools.FieldByIndexInValue(result.Addr(), i)
-				if out.CanSet() {
-					out.Set(newV)
-				} else {
-					// TODO: investigate why CanSet could be false
-					out.Elem().Set(newV.Elem())
-				}
-			} else {
-				result.Field(i).Set(newV)
+				outF = unsafetools.FieldByIndexInValue(result.Addr(), i).Elem()
 			}
+			outF.Set(newFV)
 		}
 	default:
 		panic(fmt.Errorf("unexpected kind: %v", v.Kind()))
