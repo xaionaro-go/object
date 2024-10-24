@@ -17,10 +17,12 @@ func DeepCopy[T any](
 ) T {
 	cfg := Options(opts).config()
 	v := reflect.ValueOf(&obj)
-	return *newDeepCopier(cfg).deepCopy(v, newProcContext(), nil).Interface().(*T)
+	result, _, err := newDeepCopier(cfg).deepCopy(v, newProcContext(), nil)
+	if err != nil {
+		panic(err)
+	}
+	return *result.Interface().(*T)
 }
-
-type ProcFunc func(*ProcContext, reflect.Value, *reflect.StructField) reflect.Value
 
 type deepCopier struct {
 	config                     config
@@ -37,11 +39,16 @@ func (c *deepCopier) deepCopy(
 	v reflect.Value,
 	ctx *ProcContext,
 	structField *reflect.StructField,
-) (_ret reflect.Value) {
-	if c.config.ProcFunc != nil {
-		defer func() {
-			_ret = c.config.ProcFunc(ctx, _ret, structField)
-		}()
+) (reflect.Value, bool, error) {
+	if c.config.VisitorFunc != nil {
+		newV, goDeeper, err := c.config.VisitorFunc(ctx, v, structField)
+		v = newV
+		if err != nil {
+			return v, goDeeper, fmt.Errorf("got an error from the visitor function at '%s': %w", ctx.path, err)
+		}
+		if !goDeeper {
+			return v, false, nil
+		}
 	}
 
 	t := v.Type()
@@ -85,7 +92,11 @@ func (c *deepCopier) deepCopy(
 		result.Set(v)
 	case reflect.Array:
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(c.deepCopy(v.Index(i), ctx.Next(fmt.Sprintf("[%d]", i)), nil))
+			c, _, err := c.deepCopy(v.Index(i), ctx.Next(fmt.Sprintf("[%d]", i)), nil)
+			if err != nil {
+				return reflect.Value{}, false, err
+			}
+			result.Index(i).Set(c)
 		}
 	case reflect.Chan:
 		result.Set(v)
@@ -93,41 +104,57 @@ func (c *deepCopier) deepCopy(
 		result.Set(v)
 	case reflect.Interface:
 		if !v.Elem().IsValid() { // if unwrapInterface(v) == nil { return v }
-			return v
+			return v, false, nil
 		}
-		result.Set(c.deepCopy(v.Elem(), ctx.Next("{}"), nil))
+		newV, _, err := c.deepCopy(v.Elem(), ctx.Next("{}"), nil)
+		if err != nil {
+			return result, false, err
+		}
+		result.Set(newV)
 	case reflect.Map:
 		if v.IsNil() {
-			return result
+			return result, false, nil
 		}
 		result = reflect.MakeMapWithSize(t, v.Len())
 		iter := v.MapRange()
 		for iter.Next() {
 			k := iter.Key()
 			v := iter.Value()
-			result.SetMapIndex(k, c.deepCopy(v, ctx.Next(fmt.Sprintf("[%v]", k)), nil))
+			newV, _, err := c.deepCopy(v, ctx.Next(fmt.Sprintf("[%v]", k)), nil)
+			if err != nil {
+				return result, false, err
+			}
+			result.SetMapIndex(k, newV)
 		}
 	case reflect.Pointer:
 		if v.IsNil() {
-			return result
+			return result, false, nil
 		}
 		ptr := v.Pointer()
 		if c.copiedValuesBehindPointers == nil {
 			c.copiedValuesBehindPointers = make(map[uintptr]reflect.Value)
 		}
 		if v, ok := c.copiedValuesBehindPointers[ptr]; ok {
-			return v
+			return v, false, nil
 		}
 		c.copiedValuesBehindPointers[ptr] = result
-		result.Set(reflect.New(t.Elem()))                           // result = &T{}
-		result.Elem().Set(c.deepCopy(v.Elem(), ctx.Next("*"), nil)) // *result = *v
+		result.Set(reflect.New(t.Elem())) // result = &T{}
+		newVElem, _, err := c.deepCopy(v.Elem(), ctx.Next("*"), nil)
+		if err != nil {
+			return result, false, err
+		}
+		result.Elem().Set(newVElem) // *result = *v
 	case reflect.Slice:
 		if v.IsNil() {
-			return result
+			return result, false, nil
 		}
 		result = reflect.MakeSlice(t, v.Len(), v.Len())
 		for i := 0; i < v.Len(); i++ {
-			result.Index(i).Set(c.deepCopy(v.Index(i), ctx.Next(fmt.Sprintf("[%d]", i)), nil))
+			newV, _, err := c.deepCopy(v.Index(i), ctx.Next(fmt.Sprintf("[%d]", i)), nil)
+			if err != nil {
+				return result, false, err
+			}
+			result.Index(i).Set(newV)
 		}
 	case reflect.String:
 		result.Set(v)
@@ -156,7 +183,10 @@ func (c *deepCopier) deepCopy(
 				fV = fVWithAddr
 			}
 
-			newFV := c.deepCopy(fV, ctx.Next(fT.Name), &fT)
+			newFV, _, err := c.deepCopy(fV, ctx.Next(fT.Name), &fT)
+			if err != nil {
+				return result, false, err
+			}
 			outF := result.Field(i)
 			if outF.Type() != newFV.Type() {
 				panic(fmt.Errorf("received wrong type at '%s': expected:%s, received:%s", ctx.path, outF.Type(), newFV.Type()))
@@ -170,7 +200,7 @@ func (c *deepCopier) deepCopy(
 	default:
 		panic(fmt.Errorf("unexpected kind: %v", v.Kind()))
 	}
-	return result
+	return result, false, nil
 }
 
 // DeepCopyWithoutSecrets returns a deep copy of the object, but with all
@@ -188,24 +218,29 @@ func DeepCopyWithoutSecrets[T any](
 	cfg := Options(opts).config()
 	return DeepCopy(
 		obj,
-		OptionWithProcessingFunc(func(
+		OptionWithVisitorFunc(func(
 			ctx *ProcContext,
 			v reflect.Value,
 			sf *reflect.StructField,
-		) reflect.Value {
-			if cfg.ProcFunc != nil {
-				v = cfg.ProcFunc(ctx, v, sf)
+		) (reflect.Value, bool, error) {
+			goDeeper := true
+			if cfg.VisitorFunc != nil {
+				var err error
+				v, goDeeper, err = cfg.VisitorFunc(ctx, v, sf)
+				if err != nil {
+					return v, goDeeper, err
+				}
 			}
 
 			if sf == nil {
-				return v
+				return v, goDeeper, nil
 			}
 
 			if _, ok := sf.Tag.Lookup("secret"); !ok {
-				return v
+				return v, goDeeper, nil
 			}
 
-			return reflect.Zero(v.Type())
+			return reflect.Zero(v.Type()), goDeeper, nil
 		}),
 		OptionWithUnexported(cfg.ProcessUnexported),
 	)

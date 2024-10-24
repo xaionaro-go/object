@@ -5,7 +5,7 @@ type Option interface {
 }
 
 type config struct {
-	ProcFunc          ProcFunc
+	VisitorFunc       VisitorFunc
 	ProcessUnexported bool
 }
 
@@ -29,8 +29,8 @@ func (opt OptionWithUnexported) apply(cfg *config) {
 	cfg.ProcessUnexported = bool(opt)
 }
 
-type OptionWithProcessingFunc ProcFunc
+type OptionWithVisitorFunc VisitorFunc
 
-func (opt OptionWithProcessingFunc) apply(cfg *config) {
-	cfg.ProcFunc = ProcFunc(opt)
+func (opt OptionWithVisitorFunc) apply(cfg *config) {
+	cfg.VisitorFunc = VisitorFunc(opt)
 }

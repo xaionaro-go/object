@@ -18,17 +18,17 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := object.DeepCopy(value, object.OptionWithProcessingFunc(func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
+	censoredValue := object.DeepCopy(value, object.OptionWithVisitorFunc(func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) (reflect.Value, bool, error) {
 		if sf == nil {
-			return v
+			return v, true, nil
 		}
 		switch sf.Name {
 		case "PublicData":
-			return reflect.ValueOf("true == false")
+			return reflect.ValueOf("true == false"), true, nil
 		case "SecretData":
-			return reflect.ValueOf("this is the nuance, sometimes")
+			return reflect.ValueOf("this is the nuance, sometimes"), true, nil
 		}
-		return v
+		return v, true, nil
 	}))
 	fmt.Println(censoredValue)
 }
