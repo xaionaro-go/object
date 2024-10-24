@@ -18,7 +18,7 @@ func main() {
 		SecretData: "but there is a nuance",
 	}
 
-	censoredValue := object.DeepCopyWithProcessing(value, func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
+	censoredValue := object.DeepCopy(value, object.OptionWithProcessingFunc(func(_ *object.ProcContext, v reflect.Value, sf *reflect.StructField) reflect.Value {
 		if sf == nil {
 			return v
 		}
@@ -29,6 +29,6 @@ func main() {
 			return reflect.ValueOf("this is the nuance, sometimes")
 		}
 		return v
-	})
+	}))
 	fmt.Println(censoredValue)
 }

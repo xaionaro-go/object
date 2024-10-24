@@ -90,3 +90,11 @@ func TestComplexStructure(t *testing.T) {
 	sampleWithoutSecrets.unexpectedField = ""
 	require.Equal(t, sampleWithoutSecrets, DeepCopyWithoutSecrets(sample))
 }
+
+func TestComplexStructureWithUnexported(t *testing.T) {
+	sample := testSample()
+	require.Equal(t, sample, DeepCopy(sample, OptionWithUnexported(true)))
+
+	sampleWithoutSecrets := testSampleWithoutSecrets()
+	require.Equal(t, sampleWithoutSecrets, DeepCopyWithoutSecrets(sample, OptionWithUnexported(true)))
+}
