@@ -12,13 +12,15 @@ type mapKey struct {
 }
 
 type testType struct {
-	SomeSlice        []testType
-	SomeMap          map[mapKey]testType
-	SomePublicString string
-	SomeSecretString string `secret:""`
-	SomePointer      *testType
-	SomeError        error
-	unexpectedField  string
+	SomeSlice            []testType
+	SomeMap              map[mapKey]testType
+	SomePublicString     string
+	SomeSecretString     string `secret:""`
+	SomePointer          *testType
+	SomeError            error
+	SomeSecretSliceOfAny []any            `secret:""`
+	SomeSecretMap        map[int]testType `secret:""`
+	unexpectedField      string
 }
 
 func TestNilInterface(t *testing.T) {
@@ -53,7 +55,9 @@ func testSample() *testType {
 			SomePublicString: "true == true",
 			SomeSecretString: "but there is a nuance",
 		},
-		unexpectedField: "unexpected data",
+		SomeSecretSliceOfAny: []any{"random secrets"},
+		SomeSecretMap:        map[int]testType{1: {}},
+		unexpectedField:      "unexpected data",
 	}
 }
 
